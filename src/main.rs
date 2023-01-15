@@ -19,8 +19,12 @@ use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
     pac,
     sio::Sio,
+    usb,
     watchdog::Watchdog,
 };
+
+use usb_device::{class_prelude::*, prelude::*};
+use usbd_serial::SerialPort;
 
 #[entry]
 fn main() -> ! {
@@ -44,6 +48,23 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
+    let usb_bus = UsbBusAllocator::new(usb::UsbBus::new(
+        pac.USBCTRL_REGS,
+        pac.USBCTRL_DPRAM,
+        clocks.usb_clock,
+        true,
+        &mut pac.RESETS,
+    ));
+
+    let mut serial = SerialPort::new(&usb_bus);
+
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16C0, 0x27DD))
+        .manufacturer("unknown")
+        .product("serial port")
+        .serial_number("tutorial")
+        .device_class(2)
+        .build();
+
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     let pins = bsp::Pins::new(
@@ -56,12 +77,30 @@ fn main() -> ! {
     let mut led_pin = pins.led.into_push_pull_output();
 
     loop {
-        info!("on!");
+        // info!("on!");
+        delay_with_poll_ms(&mut delay, &mut usb_dev, &mut [&mut serial], 500);
+        serial.write(b"LED ON\r\n").unwrap();
         led_pin.set_high().unwrap();
-        delay.delay_ms(500);
-        info!("off!");
+
+        // info!("off!");
+        delay_with_poll_ms(&mut delay, &mut usb_dev, &mut [&mut serial], 500);
+        serial.write(b"LED OFF\r\n").unwrap();
         led_pin.set_low().unwrap();
-        delay.delay_ms(500);
+    }
+}
+
+fn delay_with_poll_ms<A: UsbBus>(
+    delay: &mut cortex_m::delay::Delay,
+    usb_dev: &mut UsbDevice<A>,
+    classes: &mut [&mut dyn UsbClass<A>],
+    ms: u32,
+) {
+    const DELAY_MS: u32 = 1;
+    let count = ms / DELAY_MS;
+
+    for _ in 0..count {
+        let _ = usb_dev.poll(classes);
+        delay.delay_ms(DELAY_MS);
     }
 }
 
