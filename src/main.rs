@@ -59,9 +59,9 @@ fn main() -> ! {
     let mut serial = SerialPort::new(&usb_bus);
 
     let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16C0, 0x27DD))
-        .manufacturer("unknown")
+        .manufacturer("fake company")
         .product("serial port")
-        .serial_number("tutorial")
+        .serial_number("TEST")
         .device_class(2)
         .build();
 
@@ -75,15 +75,14 @@ fn main() -> ! {
     );
 
     let mut led_pin = pins.led.into_push_pull_output();
-
     loop {
-        // info!("on!");
         delay_with_poll_ms(&mut delay, &mut usb_dev, &mut [&mut serial], 500);
+        while !usb_dev.poll(&mut [&mut serial]) {}
         serial.write(b"LED ON\r\n").unwrap();
         led_pin.set_high().unwrap();
 
-        // info!("off!");
         delay_with_poll_ms(&mut delay, &mut usb_dev, &mut [&mut serial], 500);
+        while !usb_dev.poll(&mut [&mut serial]) {}
         serial.write(b"LED OFF\r\n").unwrap();
         led_pin.set_low().unwrap();
     }
